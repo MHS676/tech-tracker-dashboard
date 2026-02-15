@@ -79,6 +79,16 @@ function FitBounds({ technicians }) {
   return null
 }
 
+// Helper function to check if technician is actually online
+const isTechOnline = (tech) => {
+  if (!tech.lastPing) return false
+  const lastPingTime = new Date(tech.lastPing).getTime()
+  const now = Date.now()
+  const timeDiff = now - lastPingTime
+  // Consider online if pinged within last 2 minutes
+  return tech.isTracking && timeDiff < 120000
+}
+
 export default function LiveMap() {
   const [technicians, setTechnicians] = useState([])
   const [allTechnicians, setAllTechnicians] = useState([])
@@ -225,7 +235,7 @@ export default function LiveMap() {
   }
 
   const handleFocusTech = (tech) => {
-    setFocusedTech(tech)
+    // Only select, don't auto-zoom
     setSelectedTech(tech)
   }
 
@@ -311,7 +321,6 @@ export default function LiveMap() {
             />
             
             <FitBounds technicians={technicians} />
-            <FocusOnTech tech={focusedTech} />
 
             {/* Technician markers */}
             {technicians.map(tech => (
@@ -452,7 +461,7 @@ export default function LiveMap() {
                 <MapPin size={18} className="text-green-400" />
                 <h3 className="font-semibold">All Technicians</h3>
                 <span className="ml-auto bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">
-                  {allTechnicians.filter(t => t.isTracking).length} GPS On
+                  {allTechnicians.filter(t => isTechOnline(t)).length} GPS On
                 </span>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -477,7 +486,7 @@ export default function LiveMap() {
                       <div className="flex items-center gap-2">
                         <div 
                           className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                            tech.isTracking ? 'bg-green-500' : 'bg-gray-600'
+                            isTechOnline(tech) ? 'bg-green-500' : 'bg-gray-600'
                           }`}
                         >
                           {tech.name?.charAt(0) || '?'}
@@ -485,7 +494,7 @@ export default function LiveMap() {
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium text-sm truncate">{tech.name}</h4>
                           <div className="flex items-center gap-2 text-xs">
-                            {tech.isTracking ? (
+                            {isTechOnline(tech) ? (
                               <span className="text-green-400 flex items-center gap-1">
                                 <Activity size={10} className="animate-pulse" />
                                 GPS On
