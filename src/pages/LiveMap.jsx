@@ -253,14 +253,25 @@ export default function LiveMap() {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
+  const getStatusColor = (tech) => {
+    // If GPS is off or not tracking, always show offline
+    if (!isTechOnline(tech)) {
+      return '#6B7280' // Gray for offline
+    }
+    // If GPS is on and tracking, use their actual status
+    switch (tech.status) {
       case 'ONLINE': return '#22C55E'
       case 'ON_WAY': return '#3B82F6'
       case 'ON_SITE': return '#F59E0B'
-      case 'OFFLINE': return '#6B7280'
-      default: return '#6B7280'
+      default: return '#22C55E' // Default to green if tracking
     }
+  }
+
+  const getDisplayStatus = (tech) => {
+    if (!isTechOnline(tech)) {
+      return 'OFFLINE'
+    }
+    return tech.status || 'ONLINE'
   }
 
   // Default center (Dhaka, Bangladesh)
@@ -328,7 +339,7 @@ export default function LiveMap() {
                 <Marker
                   key={tech.id}
                   position={[tech.lastLat, tech.lastLng]}
-                  icon={createIcon(getStatusColor(tech.status), 35)}
+                  icon={createIcon(getStatusColor(tech), 35)}
                   eventHandlers={{
                     click: () => handleSelectTech(tech)
                   }}
@@ -339,12 +350,12 @@ export default function LiveMap() {
                       <p className="text-sm text-gray-600">{tech.email}</p>
                       <p className="text-sm mt-1">
                         <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          tech.status === 'ONLINE' ? 'bg-green-100 text-green-800' :
-                          tech.status === 'ON_WAY' ? 'bg-blue-100 text-blue-800' :
-                          tech.status === 'ON_SITE' ? 'bg-yellow-100 text-yellow-800' :
+                          isTechOnline(tech) && tech.status === 'ONLINE' ? 'bg-green-100 text-green-800' :
+                          isTechOnline(tech) && tech.status === 'ON_WAY' ? 'bg-blue-100 text-blue-800' :
+                          isTechOnline(tech) && tech.status === 'ON_SITE' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
-                          {tech.status}
+                          {getDisplayStatus(tech)}
                         </span>
                       </p>
                       {tech.jobs?.[0] && (
@@ -545,14 +556,14 @@ export default function LiveMap() {
                       <div className="flex items-center gap-3">
                         <div 
                           className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                          style={{ backgroundColor: getStatusColor(tech.status) }}
+                          style={{ backgroundColor: getStatusColor(tech) }}
                         >
                           {tech.name?.charAt(0) || '?'}
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium truncate">{tech.name}</h4>
-                          <div className="flex items-center gap-2 text-xs text-dark-400">
-                            <TechStatusBadge status={tech.status} />
+                          <div className="flex items-center gap-2 text-xs">
+                            <TechStatusBadge status={getDisplayStatus(tech)} />
                             {tech.isTracking && (
                               <span className="text-green-400 flex items-center gap-1">
                                 <Activity size={10} className="animate-pulse" />
