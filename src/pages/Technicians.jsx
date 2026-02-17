@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../context/DataContext'
-import { Plus, Users, Loader2, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Users, Loader2, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TechStatusBadge, TrackingBadge } from '../components/Badge'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
@@ -16,6 +16,8 @@ export default function Technicians() {
   const [toast, setToast] = useState(null)
   const [formData, setFormData] = useState({ name: '', email: '', password: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   useEffect(() => {
     fetchTechnicians().catch(err => {
@@ -75,6 +77,16 @@ export default function Technicians() {
     return name?.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || '?'
   }
 
+  // Pagination
+  const totalPages = Math.ceil(technicians.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTechnicians = technicians.slice(startIndex, endIndex)
+
+  const goToPage = (page) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,7 +116,7 @@ export default function Technicians() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
-                {technicians.map(tech => (
+                {paginatedTechnicians.map(tech => (
                   <tr key={tech.id} className="hover:bg-dark-700/30">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -146,6 +158,44 @@ export default function Technicians() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-dark-700 flex items-center justify-between">
+                <div className="text-sm text-dark-400">
+                  Showing {startIndex + 1} to {Math.min(endIndex, technicians.length)} of {technicians.length} technicians
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded bg-dark-700 hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-1.5 rounded transition-colors ${
+                        currentPage === page
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-dark-700 hover:bg-dark-600'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded bg-dark-700 hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
