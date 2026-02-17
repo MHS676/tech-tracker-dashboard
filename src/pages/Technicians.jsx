@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../context/DataContext'
-import { Plus, Users, Loader2 } from 'lucide-react'
+import { Plus, Users, Loader2, Edit2, Trash2 } from 'lucide-react'
 import { TechStatusBadge, TrackingBadge } from '../components/Badge'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
 import LoadingSpinner from '../components/LoadingSpinner'
 import EmptyState from '../components/EmptyState'
+import api from '../services/api'
 
 export default function Technicians() {
   const { technicians, loading, error, fetchTechnicians, createTechnician } = useData()
   const [showModal, setShowModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingTech, setEditingTech] = useState(null)
   const [toast, setToast] = useState(null)
   const [formData, setFormData] = useState({ name: '', email: '', password: '' })
   const [submitting, setSubmitting] = useState(false)
@@ -33,6 +36,38 @@ export default function Technicians() {
       setToast({ message: err.message, type: 'error' })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleEditTech = (tech) => {
+    setEditingTech({ ...tech, password: '' })
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async () => {
+    setSubmitting(true)
+    try {
+      const { id, name, email, password } = editingTech
+      await api.updateTechnician(id, name, email, password || undefined)
+      setShowEditModal(false)
+      setEditingTech(null)
+      setToast({ message: 'Technician updated successfully', type: 'success' })
+      await fetchTechnicians()
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteTech = async (tech) => {
+    if (!confirm(`Are you sure you want to delete ${tech.name}?`)) return
+    try {
+      await api.deleteTechnician(tech.id)
+      setToast({ message: 'Technician deleted successfully', type: 'success' })
+      await fetchTechnicians()
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
     }
   }
 
@@ -65,6 +100,7 @@ export default function Technicians() {
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Tracking</th>
                   <th className="px-6 py-4">Jobs</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
@@ -87,6 +123,24 @@ export default function Technicians() {
                     </td>
                     <td className="px-6 py-4 text-dark-400">
                       {tech.jobs?.length || 0}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => handleEditTech(tech)}
+                          className="p-2 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
+                          title="Edit technician"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTech(tech)}
+                          className="p-2 rounded bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+                          title="Delete technician"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -142,6 +196,60 @@ export default function Technicians() {
           </div>
         </form>
       </Modal>
+
+      {/* Edit Technician Modal */}
+      {showEditModal && editingTech && (
+        <Modal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setEditingTech(null); }} title="Edit Technician">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-dark-400 mb-2">Name</label>
+              <input
+                type="text"
+                value={editingTech.name}
+                onChange={(e) => setEditingTech({ ...editingTech, name: e.target.value })}
+                className="input"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-dark-400 mb-2">Email</label>
+              <input
+                type="email"
+                value={editingTech.email}
+                onChange={(e) => setEditingTech({ ...editingTech, email: e.target.value })}
+                className="input"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-dark-400 mb-2">Password (leave empty to keep current)</label>
+              <input
+                type="password"
+                value={editingTech.password}
+                onChange={(e) => setEditingTech({ ...editingTech, password: e.target.value })}
+                className="input"
+                placeholder="Enter new password or leave empty"
+              />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button 
+                type="button" 
+                onClick={() => { setShowEditModal(false); setEditingTech(null); }} 
+                className="btn btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveEdit} 
+                disabled={submitting} 
+                className="btn btn-primary flex-1"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
