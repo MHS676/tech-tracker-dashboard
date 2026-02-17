@@ -73,6 +73,27 @@ class ApiService {
     return data.admin
   }
 
+  async updateAdmin(id, name, email, password) {
+    const response = await fetch(`${API_BASE_URL}/admin/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name, email, password })
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to update admin')
+    return data.admin
+  }
+
+  async deleteAdmin(id) {
+    const response = await fetch(`${API_BASE_URL}/admin/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to delete admin')
+    return data
+  }
+
   // Technicians
   async getAllTechnicians() {
     const response = await fetch(`${API_BASE_URL}/technician/all`, {
@@ -101,6 +122,27 @@ class ApiService {
     const data = await response.json()
     if (!response.ok) throw new Error(data.error || 'Failed to create technician')
     return data.technician
+  }
+
+  async updateTechnician(id, name, email, password) {
+    const response = await fetch(`${API_BASE_URL}/admin/technician/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name, email, password })
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to update technician')
+    return data.technician
+  }
+
+  async deleteTechnician(id) {
+    const response = await fetch(`${API_BASE_URL}/admin/technician/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to delete technician')
+    return data
   }
 
   // Jobs

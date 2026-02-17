@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { MapPin, Navigation, Users, Activity, RefreshCw, Eye, X, Clock, CheckCircle } from 'lucide-react'
+import { MapPin, Navigation, Users, Activity, RefreshCw, Eye, X, Clock, CheckCircle, Search, Edit2, Trash2 } from 'lucide-react'
 import socketService from '../services/socket'
 import api from '../services/api'
 import { TechStatusBadge } from '../components/Badge'
+import Modal from '../components/Modal'
+import Toast from '../components/Toast'
 import 'leaflet/dist/leaflet.css'
 
 // Fix for default marker icons in React-Leaflet
@@ -44,26 +46,12 @@ const startIcon = createIcon('#22C55E', 25)
 const endIcon = createIcon('#EF4444', 25)
 const destinationIcon = createIcon('#F59E0B', 30)
 
-// Component to focus on a specific technician
-function FocusOnTech({ tech }) {
+// Component to fit map to bounds — only triggers when shouldFit changes to true
+function FitBounds({ technicians, shouldFit, onFitDone }) {
   const map = useMap()
   
   useEffect(() => {
-    if (tech?.lastLat && tech?.lastLng) {
-      map.flyTo([tech.lastLat, tech.lastLng], 16, {
-        duration: 1.5
-      })
-    }
-  }, [tech, map])
-  
-  return null
-}
-
-// Component to fit map to bounds
-function FitBounds({ technicians }) {
-  const map = useMap()
-  
-  useEffect(() => {
+    if (!shouldFit) return
     if (technicians.length > 0) {
       const validTechs = technicians.filter(t => t.lastLat && t.lastLng)
       if (validTechs.length > 0) {
@@ -71,10 +59,10 @@ function FitBounds({ technicians }) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
       }
     } else {
-      // Default to Bangladesh view
       map.setView([23.8103, 90.4125], 12)
     }
-  }, [technicians, map])
+    onFitDone()
+  }, [shouldFit, technicians, map, onFitDone])
   
   return null
 }
@@ -100,6 +88,11 @@ export default function LiveMap() {
   const [isConnected, setIsConnected] = useState(false)
   const [showPanel, setShowPanel] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [shouldFitBounds, setShouldFitBounds] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [editingTech, setEditingTech] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [toast, setToast] = useState(null)
   const mapRef = useRef(null)
 
   // Initialize socket connection
@@ -221,6 +214,7 @@ export default function LiveMap() {
     socketService.requestAllLocations()
     socketService.requestActiveRoutes()
     socketService.requestAllTechnicians()
+    setShouldFitBounds(true)
   }
 
   const handleSelectTech = (tech) => {
@@ -229,14 +223,23 @@ export default function LiveMap() {
     setRouteHistory([])
     setFocusedTech(tech)
     
+    // Fly to technician location on click
+    if (tech.lastLat && tech.lastLng && mapRef.current) {
+      mapRef.current.flyTo([tech.lastLat, tech.lastLng], 16, { duration: 1.5 })
+    }
+    
     if (tech.jobs?.[0]?.id) {
       socketService.requestJobRoute(tech.jobs[0].id)
     }
   }
 
   const handleFocusTech = (tech) => {
-    // Only select, don't auto-zoom
     setSelectedTech(tech)
+    setFocusedTech(tech)
+    // Fly to technician location on click
+    if (tech.lastLat && tech.lastLng && mapRef.current) {
+      mapRef.current.flyTo([tech.lastLat, tech.lastLng], 16, { duration: 1.5 })
+    }
   }
 
   const handleViewRoute = async (route) => {
@@ -272,6 +275,42 @@ export default function LiveMap() {
       return 'OFFLINE'
     }
     return tech.status || 'ONLINE'
+  }
+
+  // Filter technicians based on search query
+  const filteredTechnicians = allTechnicians.filter(tech =>
+    tech.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    tech.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Handlers for edit/delete
+  const handleEditTech = (tech) => {
+    setEditingTech({ ...tech, password: '' })
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      const { id, name, email, password } = editingTech
+      await api.updateTechnician(id, name, email, password || undefined)
+      setShowEditModal(false)
+      setEditingTech(null)
+      setToast({ type: 'success', message: 'Technician updated successfully' })
+      socketService.requestAllTechnicians()
+    } catch (error) {
+      setToast({ type: 'error', message: error.message })
+    }
+  }
+
+  const handleDeleteTech = async (tech) => {
+    if (!confirm(`Are you sure you want to delete ${tech.name}?`)) return
+    try {
+      await api.deleteTechnician(tech.id)
+      setToast({ type: 'success', message: 'Technician deleted successfully' })
+      socketService.requestAllTechnicians()
+    } catch (error) {
+      setToast({ type: 'error', message: error.message })
+    }
   }
 
   // Default center (Dhaka, Bangladesh)
@@ -331,7 +370,7 @@ export default function LiveMap() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             
-            <FitBounds technicians={technicians} />
+            <FitBounds technicians={[...technicians, ...allTechnicians]} shouldFit={shouldFitBounds} onFitDone={() => setShouldFitBounds(false)} />
 
             {/* Technician markers */}
             {technicians.map(tech => (
@@ -371,6 +410,36 @@ export default function LiveMap() {
                 </Marker>
               )
             ))}
+
+            {/* Offline technician markers (from allTechnicians, not already shown) */}
+            {allTechnicians
+              .filter(tech => tech.lastLat && tech.lastLng && !technicians.find(t => t.id === tech.id))
+              .map(tech => (
+                <Marker
+                  key={`offline-${tech.id}`}
+                  position={[tech.lastLat, tech.lastLng]}
+                  icon={createIcon('#6B7280', 30)}
+                  eventHandlers={{
+                    click: () => handleSelectTech(tech)
+                  }}
+                >
+                  <Popup>
+                    <div className="text-dark-900 min-w-[150px]">
+                      <h3 className="font-bold text-lg">{tech.name}</h3>
+                      <p className="text-sm text-gray-600">{tech.email}</p>
+                      <p className="text-sm mt-1">
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                          OFFLINE
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Last known: {tech.lastLat.toFixed(6)}, {tech.lastLng.toFixed(6)}
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))
+            }
 
             {/* Active route polylines - line from start to current position */}
             {activeRoutes.map(route => {
@@ -467,7 +536,7 @@ export default function LiveMap() {
         {showPanel && (
           <div className="w-80 flex flex-col gap-4 overflow-y-auto">
             {/* All Technicians with GPS Status */}
-            <div className="card max-h-72 overflow-hidden flex flex-col">
+            <div className="card max-h-96 overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-dark-700 flex items-center gap-2">
                 <MapPin size={18} className="text-green-400" />
                 <h3 className="font-semibold">All Technicians</h3>
@@ -475,54 +544,86 @@ export default function LiveMap() {
                   {allTechnicians.filter(t => isTechOnline(t)).length} GPS On
                 </span>
               </div>
+              
+              {/* Search Input */}
+              <div className="px-3 pt-3 pb-2">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
+                  <input
+                    type="text"
+                    placeholder="Search technicians..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-dark-700/50 border border-dark-600 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+              </div>
+              
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {allTechnicians.length === 0 ? (
+                {filteredTechnicians.length === 0 ? (
                   <p className="text-center text-dark-400 py-4 text-sm">
-                    No technicians found
+                    {searchQuery ? 'No technicians found' : 'No technicians available'}
                   </p>
                 ) : (
-                  allTechnicians.map(tech => (
-                    <button
+                  filteredTechnicians.map(tech => (
+                    <div
                       key={tech.id}
-                      onClick={() => handleFocusTech(tech)}
-                      disabled={!tech.lastLat || !tech.lastLng}
-                      className={`w-full p-2 rounded-lg text-left transition-colors ${
+                      className={`w-full p-2 rounded-lg transition-colors ${
                         focusedTech?.id === tech.id 
                           ? 'bg-green-500/20 border border-green-500' 
                           : tech.lastLat && tech.lastLng
                             ? 'bg-dark-700/50 hover:bg-dark-700 border border-transparent'
-                            : 'bg-dark-800/30 border border-transparent opacity-60 cursor-not-allowed'
+                            : 'bg-dark-800/30 border border-transparent opacity-60'
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <div 
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                            isTechOnline(tech) ? 'bg-green-500' : 'bg-gray-600'
-                          }`}
+                        <button
+                          onClick={() => handleFocusTech(tech)}
+                          disabled={!tech.lastLat && !tech.lastLng}
+                          className="flex-1 flex items-center gap-2 text-left disabled:cursor-not-allowed"
                         >
-                          {tech.name?.charAt(0) || '?'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-sm truncate">{tech.name}</h4>
-                          <div className="flex items-center gap-2 text-xs">
-                            {isTechOnline(tech) ? (
-                              <span className="text-green-400 flex items-center gap-1">
-                                <Activity size={10} className="animate-pulse" />
-                                GPS On
-                              </span>
-                            ) : (
-                              <span className="text-gray-500">GPS Off</span>
-                            )}
-                            {tech.lastLat && tech.lastLng && (
-                              <span className="text-dark-400">• Has Location</span>
-                            )}
+                          <div 
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                              isTechOnline(tech) ? 'bg-green-500' : 'bg-gray-600'
+                            }`}
+                          >
+                            {tech.name?.charAt(0) || '?'}
                           </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-sm truncate">{tech.name}</h4>
+                            <div className="flex items-center gap-2 text-xs">
+                              {isTechOnline(tech) ? (
+                                <span className="text-green-400 flex items-center gap-1">
+                                  <Activity size={10} className="animate-pulse" />
+                                  GPS On
+                                </span>
+                              ) : (
+                                <span className="text-gray-500">GPS Off</span>
+                              )}
+                              {tech.lastLat && tech.lastLng && (
+                                <span className="text-dark-400">• Has Location</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handleEditTech(tech)}
+                            className="p-1.5 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
+                            title="Edit technician"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTech(tech)}
+                            className="p-1.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+                            title="Delete technician"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                        {tech.lastLat && tech.lastLng && (
-                          <Navigation size={14} className="text-primary-400" />
-                        )}
                       </div>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -657,6 +758,75 @@ export default function LiveMap() {
           </div>
         )}
       </div>
+
+      {/* Edit Technician Modal */}
+      {showEditModal && editingTech && (
+        <Modal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditingTech(null)
+          }}
+          title="Edit Technician"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Name</label>
+              <input
+                type="text"
+                value={editingTech.name}
+                onChange={(e) => setEditingTech({ ...editingTech, name: e.target.value })}
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Email</label>
+              <input
+                type="email"
+                value={editingTech.email}
+                onChange={(e) => setEditingTech({ ...editingTech, email: e.target.value })}
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Password (leave empty to keep current)</label>
+              <input
+                type="password"
+                value={editingTech.password}
+                onChange={(e) => setEditingTech({ ...editingTech, password: e.target.value })}
+                placeholder="Enter new password or leave empty"
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={handleSaveEdit}
+                className="btn-primary flex-1"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingTech(null)
+                }}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   )
 }
