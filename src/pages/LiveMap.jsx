@@ -65,6 +65,21 @@ function FitBounds({ technicians, shouldFit, onFitDone }) {
   return null
 }
 
+// Component to handle map resize when panel toggles
+function MapResizeHandler({ showPanel }) {
+  const map = useMap()
+  
+  useEffect(() => {
+    // Small delay to let CSS transition complete
+    const timer = setTimeout(() => {
+      map.invalidateSize()
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [showPanel, map])
+  
+  return null
+}
+
 // Helper function to check if technician is actually online
 const isTechOnline = (tech) => {
   if (!tech.lastPing) return false
@@ -329,13 +344,13 @@ export default function LiveMap() {
             zoom={12}
             style={{ height: '100%', width: '100%' }}
             ref={mapRef}
-            key={showPanel ? 'with-panel' : 'without-panel'}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             
+            <MapResizeHandler showPanel={showPanel} />
             <FitBounds technicians={[...technicians, ...allTechnicians]} shouldFit={shouldFitBounds} onFitDone={() => setShouldFitBounds(false)} />
 
             {/* Technician markers */}
