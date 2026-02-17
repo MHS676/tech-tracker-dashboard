@@ -323,12 +323,13 @@ export default function LiveMap() {
       {/* Main Content */}
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Map */}
-        <div className={`flex-1 rounded-xl overflow-hidden border border-dark-700 ${showPanel ? 'lg:flex-[2]' : ''}`}>
+        <div className={`rounded-xl overflow-hidden border border-dark-700 ${showPanel ? 'flex-1 lg:flex-[2]' : 'w-full'}`}>
           <MapContainer
             center={center}
             zoom={12}
             style={{ height: '100%', width: '100%' }}
             ref={mapRef}
+            key={showPanel ? 'with-panel' : 'without-panel'}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
