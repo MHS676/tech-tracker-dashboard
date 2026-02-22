@@ -82,12 +82,15 @@ function MapResizeHandler({ showPanel }) {
 
 // Helper function to check if technician is actually online
 const isTechOnline = (tech) => {
-  if (!tech.lastPing) return false
+  // If isTracking is true, consider them online (trust the server state)
+  // Also check lastPing within 10 minutes as a fallback for stale connections
+  if (!tech.isTracking) return false
+  if (!tech.lastPing) return tech.isTracking
   const lastPingTime = new Date(tech.lastPing).getTime()
   const now = Date.now()
   const timeDiff = now - lastPingTime
-  // Consider online if pinged within last 2 minutes
-  return tech.isTracking && timeDiff < 120000
+  // Consider online if tracking is enabled and pinged within last 10 minutes
+  return timeDiff < 600000
 }
 
 export default function LiveMap() {
